@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AbsenLab — Sistem Absensi Praktikum</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+
+  <style>
+    :root {
+      --bg:          #060d1f;
+      --bg2:         #0c1730;
+      --card:        rgba(255,255,255,0.04);
+      --card-hover:  rgba(255,255,255,0.06);
+      --border:      rgba(255,255,255,0.08);
+      --teal:        #06d6a0;
+      --teal-dim:    rgba(6, 214, 160, 0.12);
+      --teal-glow:   rgba(6, 214, 160, 0.25);
+      --amber:       #f59e0b;
+      --amber-dim:   rgba(245, 158, 11, 0.12);
+      --amber-glow:  rgba(245, 158, 11, 0.25);
+      --text:        #e2e8f0;
+      --text-muted:  #94a3b8;
+      --text-dim:    #4a5568;
+      --danger:      #f43f5e;
+      --danger-dim:  rgba(244, 63, 94, 0.12);
+      --radius:      16px;
+      --radius-sm:   10px;
+      --radius-xs:   6px;
+      --shadow:      0 4px 24px rgba(0,0,0,0.3);
+    }
+
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse 80% 40% at 10% 10%, rgba(6,214,160,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 90% 90%, rgba(99,102,241,0.06) 0%, transparent 60%);
+    }
+
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 40px;
+      background: rgba(6,13,31,0.85);
+      backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { font-size: 1.35rem; font-weight: 800; letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+    .nav-logo .dot { color: var(--teal); }
+    .nav-links { display: flex; gap: 6px; }
+    .nav-btn {
+      padding: 8px 22px; border-radius: 100px; border: 1px solid var(--border);
+      background: transparent; color: var(--text-muted); cursor: pointer;
+      font-family: 'Sora', sans-serif; font-size: 0.85rem; font-weight: 500;
+      transition: all 0.2s ease; display: flex; align-items: center; gap: 6px;
+    }
+    .nav-btn:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
+    .nav-btn.active { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); font-weight: 600; }
+    .nav-btn.admin-btn:hover { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); }
+    .nav-btn.admin-btn.active { border-color: var(--amber); color: var(--amber); background: var(--amber-dim); font-weight: 600; }
+
+    main { max-width: 920px; margin: 0 auto; padding: 48px 24px 80px; }
+    .page { display: none; animation: fadeIn 0.25s ease; }
+    .page.active { display: block; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .page-header { margin-bottom: 36px; }
+    .page-header h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.8px; line-height: 1.15; }
+    .page-header h1 .accent { color: var(--teal); }
+    .page-header h1 .accent-amber { color: var(--amber); }
+    .page-header p { color: var(--text-muted); margin-top: 6px; font-size: 0.925rem; }
+
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px 32px; margin-bottom: 20px;
+      backdrop-filter: blur(12px); transition: border-color 0.2s;
+    }
+    .card:hover { border-color: rgba(255,255,255,0.12); }
+    .card-title {
+      font-size: 1.05rem; font-weight: 700; margin-bottom: 22px;
+      display: flex; align-items: center; gap: 10px; color: var(--text);
+    }
+    .card-title::before { content: ''; width: 3px; height: 18px; background: var(--teal); border-radius: 2px; flex-shrink: 0; }
+    .card-title.amber::before { background: var(--amber); }
+
+    .form-group { margin-bottom: 18px; }
+    label {
+      display: block; font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      color: var(--text-muted); margin-bottom: 7px;
+    }
+
+    input[type="text"], input[type="password"], input[type="date"],
+    input[type="email"], select, textarea {
+      width: 100%; padding: 11px 14px;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      border-radius: var(--radius-xs); color: var(--text);
+      font-family: 'Sora', sans-serif; font-size: 0.9rem;
+      transition: all 0.18s ease; outline: none;
+      appearance: none; -webkit-appearance: none;
+    }
+    input:focus, select:focus {
+      border-color: var(--teal); background: var(--teal-dim);
+      box-shadow: 0 0 0 3px var(--teal-glow);
+    }
+    select {
+      cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px;
+    }
+    select option { background: #1a2540; color: var(--text); }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px; padding: 11px 24px; border-radius: 100px; border: none;
+      cursor: pointer; font-family: 'Sora', sans-serif;
+      font-size: 0.875rem; font-weight: 600; transition: all 0.18s ease; white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+    .btn-primary { background: var(--teal); color: #060d1f; }
+    .btn-primary:hover { background: #04c090; transform: translateY(-1px); box-shadow: 0 6px 20px var(--teal-glow); }
+    .btn-amber { background: var(--amber); color: #060d1f; }
+    .btn-amber:hover { background: #e08e0b; transform: translateY(-1px); box-shadow: 0 6px 20px var(--amber-glow); }
+    .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-muted); }
+    .btn-ghost:hover { border-color: var(--teal); color: var(--teal); background: var(--teal-dim); }
+    .btn-danger { background: var(--danger-dim); border: 1px solid rgba(244,63,94,0.25); color: var(--danger); }
+    .btn-danger:hover { background: rgba(244,63,94,0.2); }
+    .btn-sm { padding: 7px 16px; font-size: 0.8rem; }
+    .btn-xs { padding: 4px 10px; font-size: 0.75rem; }
+
+    /* ---- MAHASISWA & MODUL LIST ---- */
+    .mahasiswa-container {
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      overflow: hidden; background: rgba(255,255,255,0.02);
+    }
+    .mhs-search-bar {
+      display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+      border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02);
+    }
+    .mhs-search-bar input {
+      flex: 1; background: transparent; border: none; box-shadow: none; padding: 0; font-size: 0.875rem;
+    }
+    .mhs-search-bar input:focus { box-shadow: none; background: transparent; }
+    .mhs-actions {
+      display: flex; align-items: center; gap: 12px; padding: 8px 14px;
+      border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.01);
+    }
+    .mhs-actions button {
+      background: none; border: none; color: var(--teal); font-size: 0.78rem;
+      cursor: pointer; font-family: 'Sora', sans-serif; font-weight: 600; padding: 0;
+    }
+    .mhs-actions .sep { color: var(--border); }
+    .mahasiswa-list { max-height: 310px; overflow-y: auto; }
+    .mhs-item {
+      display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer;
+      transition: background 0.12s; user-select: none;
+    }
+    .mhs-item:last-child { border-bottom: none; }
+    .mhs-item:hover { background: rgba(255,255,255,0.04); }
+    .mhs-item.checked { background: var(--teal-dim); }
+    .mhs-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--teal); cursor: pointer; flex-shrink: 0; }
+    .mhs-name { font-size: 0.9rem; flex: 1; }
+    .mhs-nim { font-size: 0.75rem; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+
+    /* ---- MODUL CHECKBOX LIST ---- */
+    .modul-list {
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .modul-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.03); cursor: pointer;
+      transition: background 0.12s; user-select: none;
+    }
+    .modul-item:last-child { border-bottom: none; }
+    .modul-item:hover { background: rgba(255,255,255,0.04); }
+    .modul-item.checked { background: var(--teal-dim); }
+    .modul-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--teal); cursor: pointer; flex-shrink: 0; }
+    .modul-nama { font-size: 0.9rem; flex: 1; }
+    .modul-selected-count {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--teal-dim); color: var(--teal);
+      padding: 3px 12px; border-radius: 100px;
+      font-size: 0.75rem; font-weight: 700;
+      border: 1px solid rgba(6,214,160,0.2);
+      margin-left: 8px;
+    }
+
+    .hadir-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--teal-dim); color: var(--teal); padding: 4px 14px;
+      border-radius: 100px; font-size: 0.8rem; font-weight: 700;
+      border: 1px solid rgba(6,214,160,0.2);
+    }
+
+    .tabs {
+      display: flex; gap: 3px; margin-bottom: 24px;
+      background: rgba(255,255,255,0.03); padding: 4px;
+      border-radius: 12px; border: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1; padding: 9px 12px; text-align: center; border-radius: 8px;
+      cursor: pointer; font-size: 0.82rem; font-weight: 500; color: var(--text-muted); transition: all 0.18s;
+    }
+    .tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .tab.active { background: var(--amber-dim); color: var(--amber); font-weight: 700; border: 1px solid rgba(245,158,11,0.2); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.2s ease; }
+
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .input-card { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .input-card h4 { font-size: 0.78rem; font-weight: 700; margin-bottom: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .inline-input { display: flex; gap: 8px; }
+    .inline-input input { flex: 1; }
+    .data-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+    .data-item { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; background: rgba(255,255,255,0.03); border-radius: 6px; font-size: 0.85rem; gap: 8px; }
+    .data-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .data-item button { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.7rem; opacity: 0.5; padding: 2px 6px; border-radius: 4px; transition: all 0.15s; flex-shrink: 0; }
+    .data-item button:hover { opacity: 1; background: var(--danger-dim); }
+
+    .upload-area { border: 2px dashed var(--border); border-radius: 12px; padding: 32px 24px; text-align: center; cursor: pointer; transition: all 0.2s; }
+    .upload-area:hover { border-color: var(--amber); background: var(--amber-dim); }
+    .upload-area .up-icon { font-size: 2.2rem; margin-bottom: 10px; }
+    .upload-area p { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; }
+    .upload-area strong { color: var(--amber); }
+
+    .table-wrapper { overflow-x: auto; border-radius: var(--radius-sm); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    thead { position: sticky; top: 0; z-index: 1; }
+    th { text-align: left; padding: 11px 14px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); border-bottom: 1px solid var(--border); background: rgba(6,13,31,0.9); font-weight: 700; white-space: nowrap; }
+    td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-muted); }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    input[type="checkbox"] { accent-color: var(--teal); cursor: pointer; }
+
+    .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; }
+    .badge-teal { background: var(--teal-dim); color: var(--teal); border: 1px solid rgba(6,214,160,0.15); }
+    .badge-amber { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(245,158,11,0.15); }
+
+    .empty-state { text-align: center; padding: 40px 24px; color: var(--text-dim); }
+    .empty-state .es-icon { font-size: 2.4rem; margin-bottom: 12px; }
+    .empty-state p { font-size: 0.875rem; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(6,13,31,0.92); backdrop-filter: blur(12px); z-index: 500; display: flex; align-items: center; justify-content: center; }
+    .modal-box { background: #0c1730; border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 40px; width: 420px; max-width: 95vw; text-align: center; box-shadow: var(--shadow); animation: modalIn 0.25s ease; }
+    @keyframes modalIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-box .modal-icon { font-size: 3rem; margin-bottom: 18px; }
+    .modal-box h2 { font-size: 1.4rem; font-weight: 800; margin-bottom: 6px; }
+    .modal-box .modal-desc { color: var(--text-muted); font-size: 0.875rem; margin-bottom: 24px; line-height: 1.6; }
+    .modal-box .form-group { text-align: left; margin-bottom: 14px; }
+    .modal-btn-row { display: flex; gap: 8px; margin-top: 4px; }
+
+    #toast-container { position: fixed; bottom: 28px; right: 28px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+    .toast { padding: 12px 20px; border-radius: 10px; font-size: 0.85rem; font-weight: 500; max-width: 340px; animation: toastIn 0.25s ease; box-shadow: var(--shadow); display: flex; align-items: center; gap: 8px; }
+    @keyframes toastIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(20px); opacity: 0; } }
+    .toast.success { background: var(--teal); color: #060d1f; }
+    .toast.error   { background: var(--danger); color: white; }
+    .toast.info    { background: #3b82f6; color: white; }
+    .toast.warning { background: var(--amber); color: #060d1f; }
+
+    .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.2); border-top-color: currentColor; border-radius: 50%; animation: spin 0.6s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .divider { height: 1px; background: var(--border); margin: 22px 0; }
+
+    .excel-preview { margin-top: 16px; padding: 16px; background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.15); border-radius: 10px; font-size: 0.82rem; }
+    .excel-preview .prev-title { color: var(--amber); font-weight: 700; margin-bottom: 12px; }
+    .excel-preview table { font-size: 0.8rem; }
+    .excel-preview th { background: transparent; font-size: 0.7rem; }
+    .excel-preview td { padding: 6px 10px; }
+
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .gap-2 { gap: 8px; }
+    .gap-3 { gap: 12px; }
+    .mb-0 { margin-bottom: 0 !important; }
+    .ml-auto { margin-left: auto; }
+    .w-full { width: 100%; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    @media (max-width: 640px) {
+      nav { padding: 10px 14px; flex-wrap: wrap; gap: 10px; }
+      .nav-links { width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+      .nav-btn { justify-content: center; padding: 10px; font-size: 0.8rem; }
+      main { padding: 20px 12px 80px; }
+      .form-row, .input-grid { grid-template-columns: 1fr; }
+      .card { padding: 18px 16px; }
+      .page-header h1 { font-size: 1.55rem; }
+      .modal-box { padding: 24px 18px; }
+      .tabs { flex-wrap: wrap; }
+      .tab { flex: none; width: calc(50% - 4px); font-size: 0.78rem; padding: 9px 6px; }
+      .tabs .tab:last-child { width: 100%; }
+      .btn { padding: 13px 20px; font-size: 0.9rem; }
+      .btn-sm { padding: 10px 14px; }
+      .inline-input { flex-direction: column; }
+      .inline-input .btn { width: 100%; }
+      #btnExportWord { width: 100%; justify-content: center; }
+      .mahasiswa-list { max-height: 250px; }
+      #absensiTbody td:nth-child(7), thead th:nth-child(7) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- OVERLAY: Supabase Config -->
+<div class="overlay" id="overlayConfig" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-icon">⚙️</div>
+    <h2>Konfigurasi Supabase</h2>
+    <p class="modal-desc">Masukkan URL dan Anon Key dari project Supabase Anda.</p>
+    <div class="form-group">
+      <label>Supabase Project URL</label>
+      <input type="text" id="cfgUrl" placeholder="https://xxxxxxxx.supabase.co">
+    </div>
+    <div class="form-group">
+      <label>Supabase Anon Key</label>
+      <input type="text" id="cfgKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+    </div>
+    <button class="btn btn-primary w-full" onclick="initSupabase()" style="margin-top:8px;">🔗 Hubungkan ke Database</button>
+  </div>
+</div>
+
+<!-- OVERLAY: Admin Password -->
+<div class="overlay" id="overlayAdmin" style="display:none;">
+  <div class="modal-box">
+    <div class="modal-icon">🔐</div>
+    <h2>Akses Admin</h2>
+    <p class="modal-desc">Masukkan password untuk mengakses panel Admin.</p>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="adminPwd" placeholder="••••••••" onkeypress="if(event.key==='Enter') checkAdminPassword()">
+    </div>
+    <div class="modal-btn-row">
+      <button class="btn btn-ghost w-full" onclick="closeAdminModal()">Batal</button>
+      <button class="btn btn-amber w-full" onclick="checkAdminPassword()">Masuk</button>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Absen<span class="dot">Lab</span></div>
+  <div class="nav-links">
+    <button class="nav-btn active" id="navBtnRekap" onclick="showPage('rekap')">📋 Rekap Absen</button>
+    <button class="nav-btn admin-btn" id="navBtnAdmin" onclick="requestAdminAccess()">⚙️ Admin</button>
+  </div>
+</nav>
+
+<main>
+
+  <!-- PAGE: REKAP ABSEN -->
+  <div class="page active" id="pageRekap">
+    <div class="page-header">
+      <h1>Rekap <span class="accent">Absensi</span></h1>
+      <p>Catat kehadiran mahasiswa pada sesi praktikum</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Informasi Sesi Praktikum</div>
+
+      <div class="form-row">
+        <div class="form-group mb-0">
+          <label>Nama Asisten</label>
+          <select id="rekap_asisten">
+            <option value="">— Pilih Asisten —</option>
+          </select>
+        </div>
+        <div class="form-group mb-0">
+          <label>Kelompok</label>
+          <input type="text" id="rekap_kelompok" placeholder="Contoh: A1, B3 ...">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="form-row">
+        <div class="form-group mb-0">
+          <label>Asal Universitas</label>
+          <select id="rekap_univ" onchange="onUnivChange()">
+            <option value="">— Pilih Universitas —</option>
+          </select>
+        </div>
+        <div class="form-group mb-0">
+          <label>Tanggal Praktikum</label>
+          <input type="date" id="rekap_tanggal">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- MODUL: checkbox list, bisa pilih lebih dari 1 -->
+      <div class="form-group mb-0">
+        <div class="flex items-center" style="margin-bottom:7px;">
+          <label style="margin-bottom:0;">Modul Praktikum</label>
+          <span class="modul-selected-count" id="modulCount">0 dipilih</span>
+        </div>
+        <div class="mahasiswa-container" id="modulContainer">
+          <div class="empty-state" style="padding:20px;">
+            <div class="spinner" style="margin:0 auto 8px;"></div>
+            <p>Memuat modul...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daftar Mahasiswa -->
+    <div class="card">
+      <div class="flex items-center justify-between" style="margin-bottom:18px;">
+        <div class="card-title" style="margin-bottom:0;">Daftar Mahasiswa Hadir</div>
+        <div class="hadir-badge" id="hadirBadge">0 hadir</div>
+      </div>
+      <div class="mahasiswa-container" id="mahasiswaContainer">
+        <div class="empty-state">
+          <div class="es-icon">🏫</div>
+          <p>Pilih <strong>Asal Universitas</strong> terlebih dahulu</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex gap-3" style="justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="resetRekapForm()">↺ Reset Form</button>
+      <button class="btn btn-primary" onclick="submitAbsensi()">✓ Simpan Absensi</button>
+    </div>
+  </div>
+
+  <!-- PAGE: ADMIN -->
+  <div class="page" id="pageAdmin">
+    <div class="flex items-center justify-between" style="margin-bottom:36px;">
+      <div class="page-header" style="margin-bottom:0;">
+        <h1>Panel <span class="accent-amber">Admin</span></h1>
+        <p>Kelola data master dan unduh laporan absensi</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="logoutAdmin()" style="flex-shrink:0;">🔒 Keluar</button>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" id="tabBtn0" onclick="switchAdminTab(0)">📥 Input Data Master</div>
+      <div class="tab"        id="tabBtn1" onclick="switchAdminTab(1)">👥 Data Mahasiswa</div>
+      <div class="tab"        id="tabBtn2" onclick="switchAdminTab(2)">📄 Download Laporan</div>
+    </div>
+
+    <!-- TAB 0: Input Data Master -->
+    <div class="tab-content active" id="adminTab0">
+      <div class="input-grid">
+        <div class="input-card">
+          <h4>👤 Nama Asisten</h4>
+          <div class="inline-input">
+            <input type="text" id="in_asisten" placeholder="Nama asisten..." onkeypress="if(event.key==='Enter') addAsisten()">
+            <button class="btn btn-ghost btn-sm" onclick="addAsisten()">+</button>
+          </div>
+          <div class="data-list" id="dl_asisten"><p style="font-size:0.8rem;color:var(--text-dim);padding:8px;">Belum ada data</p></div>
+        </div>
+        <div class="input-card">
+          <h4>📚 Modul Praktikum</h4>
+          <div class="inline-input">
+            <input type="text" id="in_modul" placeholder="Nama modul..." onkeypress="if(event.key==='Enter') addModul()">
+            <button class="btn btn-ghost btn-sm" onclick="addModul()">+</button>
+          </div>
+          <div class="data-list" id="dl_modul"><p style="font-size:0.8rem;color:var(--text-dim);padding:8px;">Belum ada data</p></div>
+        </div>
+        <div class="input-card" style="grid-column:1/-1;">
+          <h4>🏛️ Universitas</h4>
+          <div class="inline-input">
+            <input type="text" id="in_univ" placeholder="Nama universitas..." onkeypress="if(event.key==='Enter') addUniversitas()">
+            <button class="btn btn-ghost btn-sm" onclick="addUniversitas()">+</button>
+          </div>
+          <div class="data-list" id="dl_univ" style="max-height:120px;flex-direction:row;flex-wrap:wrap;gap:6px;margin-top:12px;">
+            <p style="font-size:0.8rem;color:var(--text-dim);padding:8px;">Belum ada data</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 1: Data Mahasiswa -->
+    <div class="tab-content" id="adminTab1">
+      <div class="card">
+        <div class="card-title amber">Input Manual</div>
+        <div class="form-row">
+          <div class="form-group mb-0">
+            <label>Nama Mahasiswa</label>
+            <input type="text" id="in_mhs_nama" placeholder="Nama lengkap mahasiswa...">
+          </div>
+          <div class="form-group mb-0">
+            <label>NIM</label>
+            <input type="text" id="in_mhs_nim" placeholder="Nomor Induk Mahasiswa...">
+          </div>
+        </div>
+        <div class="form-group" style="margin-top:14px;">
+          <label>Universitas</label>
+          <select id="in_mhs_univ"><option value="">— Pilih Universitas —</option></select>
+        </div>
+        <button class="btn btn-amber" onclick="addMahasiswa()">+ Tambah Mahasiswa</button>
+      </div>
+      <div class="card">
+        <div class="card-title amber">Upload dari File Excel</div>
+        <div class="upload-area" onclick="document.getElementById('excelFile').click()">
+          <div class="up-icon">📊</div>
+          <p><strong>Klik untuk pilih file Excel</strong></p>
+          <p>Format kolom: <strong>Nama</strong> | <strong>NIM</strong> | <strong>Universitas</strong></p>
+          <p style="margin-top:6px;font-size:0.75rem;">Mendukung .xlsx, .xls, .csv</p>
+        </div>
+        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none;" onchange="handleExcelUpload(event)">
+        <div id="excelPreviewContainer"></div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Download Laporan -->
+    <div class="tab-content" id="adminTab2">
+      <div class="card">
+        <div class="card-title amber">Filter & Export Data Absensi</div>
+        <div class="flex gap-3 items-center" style="flex-wrap:wrap;margin-bottom:20px;">
+          <div class="form-group mb-0" style="flex:1;min-width:180px;">
+            <label>Tanggal Mulai</label>
+            <input type="date" id="filterStart">
+          </div>
+          <div class="form-group mb-0" style="flex:1;min-width:180px;">
+            <label>Tanggal Akhir</label>
+            <input type="date" id="filterEnd">
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:8px;padding-top:20px;">
+            <button class="btn btn-ghost btn-sm" onclick="loadAbsensiTable()">🔍 Tampilkan</button>
+            <button class="btn btn-amber btn-sm" id="btnExportWord" style="display:none;" onclick="exportSelectedToWord()">⬇ Export Word</button>
+          </div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;"><input type="checkbox" id="checkAll" onchange="toggleAllRows(this)"></th>
+                <th>Tanggal</th>
+                <th>Asisten</th>
+                <th>Kelompok</th>
+                <th>Universitas</th>
+                <th>Modul</th>
+                <th>Hadir</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="absensiTbody">
+              <tr><td colspan="8"><div class="empty-state"><div class="es-icon">📋</div><p>Klik "Tampilkan" untuk memuat data absensi</p></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast-container"></div>
+
+<script>
+'use strict';
+
+// ============================================================
+// CONFIG & STATE
+// ============================================================
+const ADMIN_PASSWORD = 'ljr2026';
+const SUPABASE_URL = 'https://ahmhfzrqrchytkextstw.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFobWhmenJxcmNoeXRrZXh0c3R3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMzA4MTAsImV4cCI6MjA5MjkwNjgxMH0.eqP_PGbjn0G_jGY-cJSlzjoJ0yVm90mQg8CTJbaZ9Rw';
+let sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let isAdmin        = false;
+let allMahasiswa   = [];
+let absensiRows    = [];
+let excelParsedData = [];
+
+// ============================================================
+// INIT
+// ============================================================
+function initSupabase() {
+  const url = document.getElementById('cfgUrl').value.trim();
+  const key = document.getElementById('cfgKey').value.trim();
+  if (!url || !key) { toast('Harap isi URL dan Key!', 'error'); return; }
+  try {
+    sb = window.supabase.createClient(url, key);
+    localStorage.setItem('sb_url', url);
+    localStorage.setItem('sb_key', key);
+    document.getElementById('overlayConfig').style.display = 'none';
+    toast('✅ Database terhubung!', 'success');
+    loadAllDropdowns();
+  } catch(e) { toast('Gagal: ' + e.message, 'error'); }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('rekap_tanggal').value = todayStr();
+  loadAllDropdowns();
+});
+
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(page === 'rekap' ? 'pageRekap' : 'pageAdmin').classList.add('active');
+  document.getElementById(page === 'rekap' ? 'navBtnRekap' : 'navBtnAdmin').classList.add('active');
+}
+
+function requestAdminAccess() {
+  if (isAdmin) { showPage('admin'); return; }
+  document.getElementById('overlayAdmin').style.display = 'flex';
+  setTimeout(() => document.getElementById('adminPwd').focus(), 80);
+}
+
+function closeAdminModal() {
+  document.getElementById('overlayAdmin').style.display = 'none';
+  document.getElementById('adminPwd').value = '';
+}
+
+function checkAdminPassword() {
+  if (document.getElementById('adminPwd').value === ADMIN_PASSWORD) {
+    isAdmin = true;
+    closeAdminModal();
+    showPage('admin');
+    loadAdminData();
+    toast('Selamat datang, Admin!', 'success');
+  } else {
+    toast('Password salah!', 'error');
+    document.getElementById('adminPwd').value = '';
+    document.getElementById('adminPwd').focus();
+  }
+}
+
+function logoutAdmin() {
+  isAdmin = false;
+  showPage('rekap');
+  toast('Keluar dari panel admin.', 'info');
+}
+
+function switchAdminTab(idx) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.tab-content').forEach((c, i) => c.classList.toggle('active', i === idx));
+  if (idx === 2) loadAbsensiTable();
+}
+
+// ============================================================
+// LOAD DROPDOWNS
+// ============================================================
+async function loadAllDropdowns() {
+  if (!sb) return;
+  await Promise.all([fetchAsisten(), fetchUniversitas(), fetchModul()]);
+}
+
+async function fetchAsisten() {
+  const { data } = await sb.from('tabel_asisten').select('id,nama').order('nama');
+  const sel = document.getElementById('rekap_asisten');
+  sel.innerHTML = '<option value="">— Pilih Asisten —</option>';
+  (data || []).forEach(a => sel.innerHTML += `<option value="${a.id}">${escHtml(a.nama)}</option>`);
+}
+
+async function fetchUniversitas() {
+  const { data } = await sb.from('tabel_universitas').select('id,nama').order('nama');
+  ['rekap_univ', 'in_mhs_univ'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Pilih Universitas —</option>';
+    (data || []).forEach(u => sel.innerHTML += `<option value="${u.id}">${escHtml(u.nama)}</option>`);
+  });
+}
+
+// ---- MODUL: render sebagai checkbox list ----
+async function fetchModul() {
+  const { data } = await sb.from('tabel_modul').select('id,nama').order('nama');
+  const container = document.getElementById('modulContainer');
+
+  if (!data || data.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:20px;"><p>Belum ada modul. Tambahkan di menu Admin.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="modul-list">
+      ${data.map(m => `
+        <div class="modul-item" id="modulItem_${m.id}" onclick="toggleModul('${m.id}')">
+          <input type="checkbox" id="chkModul_${m.id}" value="${m.id}"
+                 onchange="updateModulCount()" onclick="event.stopPropagation()">
+          <span class="modul-nama">${escHtml(m.nama)}</span>
+        </div>`).join('')}
+    </div>`;
+  updateModulCount();
+}
+
+function toggleModul(id) {
+  const chk  = document.getElementById('chkModul_' + id);
+  const item = document.getElementById('modulItem_' + id);
+  if (!chk) return;
+  chk.checked = !chk.checked;
+  item.classList.toggle('checked', chk.checked);
+  updateModulCount();
+}
+
+function updateModulCount() {
+  const count = document.querySelectorAll('#modulContainer input[type="checkbox"]:checked').length;
+  document.getElementById('modulCount').textContent = `${count} dipilih`;
+}
+
+function getCheckedModulIds() {
+  return Array.from(
+    document.querySelectorAll('#modulContainer input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
+}
+
+// ============================================================
+// MAHASISWA
+// ============================================================
+async function onUnivChange() {
+  const univId = document.getElementById('rekap_univ').value;
+  const container = document.getElementById('mahasiswaContainer');
+  if (!univId) {
+    allMahasiswa = [];
+    container.innerHTML = `<div class="empty-state"><div class="es-icon">🏫</div><p>Pilih <strong>Asal Universitas</strong> terlebih dahulu</p></div>`;
+    updateHadirBadge();
+    return;
+  }
+  container.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>`;
+  const { data, error } = await sb.from('tabel_mahasiswa').select('id,nama,nim').eq('universitas_id', univId).order('nama');
+  if (error) { toast('Gagal memuat mahasiswa: ' + error.message, 'error'); return; }
+  allMahasiswa = data || [];
+  renderMahasiswaList(allMahasiswa);
+}
+
+function renderMahasiswaList(list) {
+  const container = document.getElementById('mahasiswaContainer');
+  if (!list || list.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="es-icon">😶</div><p>Belum ada mahasiswa dari universitas ini</p></div>`;
+    return;
+  }
+  container.innerHTML = `
+    <div class="mhs-search-bar">
+      <span style="color:var(--text-dim);">🔍</span>
+      <input type="text" id="mhsSearch" placeholder="Cari nama mahasiswa..." oninput="filterMahasiswaList(this.value)">
+    </div>
+    <div class="mhs-actions">
+      <button onclick="selectAllMhs(true)">Pilih Semua</button>
+      <span class="sep">|</span>
+      <button onclick="selectAllMhs(false)" style="color:var(--text-dim);">Batal Semua</button>
+    </div>
+    <div class="mahasiswa-list" id="mhsList">
+      ${list.map(m => mhsItemHtml(m, false)).join('')}
+    </div>`;
+  updateHadirBadge();
+}
+
+function mhsItemHtml(m, checked) {
+  return `
+    <div class="mhs-item ${checked ? 'checked' : ''}" id="mhsItem_${m.id}" onclick="toggleMhs('${m.id}')">
+      <input type="checkbox" id="chk_${m.id}" value="${m.id}" ${checked ? 'checked' : ''}
+             onchange="updateHadirBadge()" onclick="event.stopPropagation()">
+      <span class="mhs-name">${escHtml(m.nama)}</span>
+      <span class="mhs-nim font-mono">${escHtml(m.nim || '')}</span>
+    </div>`;
+}
+
+function toggleMhs(id) {
+  const chk  = document.getElementById('chk_' + id);
+  const item = document.getElementById('mhsItem_' + id);
+  if (!chk) return;
+  chk.checked = !chk.checked;
+  item.classList.toggle('checked', chk.checked);
+  updateHadirBadge();
+}
+
+function updateHadirBadge() {
+  const count = document.querySelectorAll('#mahasiswaContainer input[type="checkbox"]:checked').length;
+  document.getElementById('hadirBadge').textContent = `${count} hadir`;
+}
+
+function filterMahasiswaList(q) {
+  q = q.toLowerCase().trim();
+  const filtered = q ? allMahasiswa.filter(m => m.nama.toLowerCase().includes(q)) : allMahasiswa;
+  const mhsList = document.getElementById('mhsList');
+  if (!mhsList) return;
+  mhsList.innerHTML = filtered.map(m => {
+    const isChecked = !!document.getElementById('chk_' + m.id)?.checked;
+    return mhsItemHtml(m, isChecked);
+  }).join('');
+  updateHadirBadge();
+}
+
+function selectAllMhs(check) {
+  document.querySelectorAll('#mhsList input[type="checkbox"]').forEach(cb => {
+    cb.checked = check;
+    const item = document.getElementById('mhsItem_' + cb.value);
+    if (item) item.classList.toggle('checked', check);
+  });
+  updateHadirBadge();
+}
+
+// ============================================================
+// SUBMIT ABSENSI
+// ============================================================
+async function submitAbsensi() {
+  const asisten_id     = document.getElementById('rekap_asisten').value;
+  const kelompok       = document.getElementById('rekap_kelompok').value.trim();
+  const universitas_id = document.getElementById('rekap_univ').value;
+  const tanggal        = document.getElementById('rekap_tanggal').value;
+  const modulIds       = getCheckedModulIds();
+
+  if (!asisten_id || !kelompok || !universitas_id || !tanggal) {
+    toast('Harap lengkapi semua field informasi sesi!', 'error'); return;
+  }
+  if (modulIds.length === 0) {
+    toast('Pilih minimal 1 modul praktikum!', 'error'); return;
+  }
+
+  const mhsChecked = Array.from(
+    document.querySelectorAll('#mahasiswaContainer input[type="checkbox"]:checked')
+  ).map(cb => cb.value);
+
+  if (mhsChecked.length === 0) {
+    toast('Pilih minimal 1 mahasiswa yang hadir!', 'error'); return;
+  }
+
+  // 1. Insert header absensi (tanpa modul_id)
+  const { data: absensiRec, error: err1 } = await sb
+    .from('tabel_absensi')
+    .insert([{ asisten_id, kelompok, universitas_id, tanggal }])
+    .select().single();
+
+  if (err1) { toast('Gagal menyimpan absensi: ' + err1.message, 'error'); return; }
+
+  // 2. Insert modul-modul yang dipilih ke tabel_absensi_modul
+  const modulRows = modulIds.map(modul_id => ({ absensi_id: absensiRec.id, modul_id }));
+  const { error: err2 } = await sb.from('tabel_absensi_modul').insert(modulRows);
+  if (err2) { toast('Gagal simpan modul: ' + err2.message, 'error'); return; }
+
+  // 3. Insert mahasiswa hadir ke tabel_absensi_mahasiswa
+  const mhsRows = mhsChecked.map(mahasiswa_id => ({ absensi_id: absensiRec.id, mahasiswa_id }));
+  const { error: err3 } = await sb.from('tabel_absensi_mahasiswa').insert(mhsRows);
+  if (err3) { toast('Absensi tersimpan, tapi gagal simpan mahasiswa: ' + err3.message, 'warning'); return; }
+
+  toast(`✅ Absensi berhasil disimpan! (${mhsChecked.length} hadir, ${modulIds.length} modul)`, 'success');
+  resetRekapForm();
+}
+
+function resetRekapForm() {
+  document.getElementById('rekap_asisten').value  = '';
+  document.getElementById('rekap_kelompok').value = '';
+  document.getElementById('rekap_univ').value     = '';
+  document.getElementById('rekap_tanggal').value  = todayStr();
+
+  // Reset modul checkboxes
+  document.querySelectorAll('#modulContainer input[type="checkbox"]').forEach(cb => {
+    cb.checked = false;
+    const item = document.getElementById('modulItem_' + cb.value);
+    if (item) item.classList.remove('checked');
+  });
+  updateModulCount();
+
+  // Reset mahasiswa
+  document.getElementById('mahasiswaContainer').innerHTML = `
+    <div class="empty-state"><div class="es-icon">🏫</div><p>Pilih <strong>Asal Universitas</strong> terlebih dahulu</p></div>`;
+  document.getElementById('hadirBadge').textContent = '0 hadir';
+  allMahasiswa = [];
+}
+
+// ============================================================
+// ADMIN DATA
+// ============================================================
+async function loadAdminData() {
+  await loadAllDropdowns();
+  await Promise.all([loadAsistenList(), loadModulList(), loadUnivList()]);
+  await fetchUniversitas();
+}
+
+async function loadAsistenList() {
+  const { data } = await sb.from('tabel_asisten').select('id,nama').order('nama');
+  renderDataList('dl_asisten', data, 'tabel_asisten', 'loadAsistenList');
+}
+async function loadModulList() {
+  const { data } = await sb.from('tabel_modul').select('id,nama').order('nama');
+  renderDataList('dl_modul', data, 'tabel_modul', 'loadModulList');
+}
+async function loadUnivList() {
+  const { data } = await sb.from('tabel_universitas').select('id,nama').order('nama');
+  renderDataList('dl_univ', data, 'tabel_universitas', 'loadUnivList');
+}
+
+function renderDataList(containerId, data, tableName, refreshFnName) {
+  const el = document.getElementById(containerId);
+  if (!data || data.length === 0) {
+    el.innerHTML = '<p style="font-size:0.8rem;color:var(--text-dim);padding:8px;">Belum ada data</p>';
+    return;
+  }
+  el.innerHTML = data.map(item => `
+    <div class="data-item">
+      <span title="${escHtml(item.nama)}">${escHtml(item.nama)}</span>
+      <button onclick="deleteData('${tableName}','${item.id}','${refreshFnName}')">✕</button>
+    </div>`).join('');
+}
+
+async function addAsisten() {
+  const nama = document.getElementById('in_asisten').value.trim();
+  if (!nama) return;
+  const { error } = await sb.from('tabel_asisten').insert([{ nama }]);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  document.getElementById('in_asisten').value = '';
+  toast('Asisten ditambahkan!', 'success');
+  loadAsistenList(); fetchAsisten();
+}
+
+async function addModul() {
+  const nama = document.getElementById('in_modul').value.trim();
+  if (!nama) return;
+  const { error } = await sb.from('tabel_modul').insert([{ nama }]);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  document.getElementById('in_modul').value = '';
+  toast('Modul ditambahkan!', 'success');
+  loadModulList(); fetchModul();
+}
+
+async function addUniversitas() {
+  const nama = document.getElementById('in_univ').value.trim();
+  if (!nama) return;
+  const { error } = await sb.from('tabel_universitas').insert([{ nama }]);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  document.getElementById('in_univ').value = '';
+  toast('Universitas ditambahkan!', 'success');
+  loadUnivList(); fetchUniversitas();
+}
+
+async function deleteData(table, id, refreshFnName) {
+  if (!confirm('Yakin ingin menghapus data ini?')) return;
+  const { error } = await sb.from(table).delete().eq('id', id);
+  if (error) { toast('Gagal menghapus: ' + error.message, 'error'); return; }
+  toast('Data dihapus.', 'info');
+  window[refreshFnName]();
+  loadAllDropdowns();
+}
+
+async function addMahasiswa() {
+  const nama = document.getElementById('in_mhs_nama').value.trim();
+  const nim  = document.getElementById('in_mhs_nim').value.trim();
+  const universitas_id = document.getElementById('in_mhs_univ').value;
+  if (!nama) { toast('Nama mahasiswa wajib diisi!', 'error'); return; }
+  if (!universitas_id) { toast('Pilih universitas!', 'error'); return; }
+  const { error } = await sb.from('tabel_mahasiswa').insert([{ nama, nim, universitas_id }]);
+  if (error) { toast('Gagal: ' + error.message, 'error'); return; }
+  document.getElementById('in_mhs_nama').value = '';
+  document.getElementById('in_mhs_nim').value  = '';
+  toast('Mahasiswa berhasil ditambahkan!', 'success');
+}
+
+// ============================================================
+// EXCEL UPLOAD
+// ============================================================
+async function handleExcelUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb   = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      if (rows.length === 0) { toast('File Excel kosong!', 'error'); return; }
+      excelParsedData = rows;
+      showExcelPreview(rows);
+    } catch(err) { toast('Gagal membaca Excel: ' + err.message, 'error'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showExcelPreview(rows) {
+  const cols = Object.keys(rows[0]);
+  document.getElementById('excelPreviewContainer').innerHTML = `
+    <div class="excel-preview">
+      <div class="prev-title">📊 Preview: ${rows.length} baris ditemukan</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead><tr>${cols.map(c => `<th>${escHtml(c)}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${rows.slice(0,5).map(r => `<tr>${cols.map(c => `<td>${escHtml(String(r[c]))}</td>`).join('')}</tr>`).join('')}
+            ${rows.length > 5 ? `<tr><td colspan="${cols.length}" style="color:var(--text-dim);font-style:italic;">... dan ${rows.length-5} baris lainnya</td></tr>` : ''}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px;">
+        <button class="btn btn-amber btn-sm" onclick="importExcelToDb()">⬆ Import ke Database</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearExcelPreview()">Batal</button>
+      </div>
+    </div>`;
+}
+
+function clearExcelPreview() {
+  document.getElementById('excelPreviewContainer').innerHTML = '';
+  document.getElementById('excelFile').value = '';
+  excelParsedData = [];
+}
+
+async function importExcelToDb() {
+  if (excelParsedData.length === 0) return;
+  const { data: univData } = await sb.from('tabel_universitas').select('id,nama');
+  const univMap = {};
+  (univData || []).forEach(u => { univMap[u.nama.trim().toLowerCase()] = u.id; });
+  const toInsert = [], failedRows = [];
+  excelParsedData.forEach((row, i) => {
+    const nama    = getCol(row, ['Nama','NAMA','nama','name']) || '';
+    const nim     = String(getCol(row, ['NIM','nim','Nim']) || '');
+    const univStr = String(getCol(row, ['Universitas','universitas','UNIVERSITAS','Univ','univ']) || '').trim();
+    if (!nama.trim()) { failedRows.push(`Baris ${i+2}: Nama kosong`); return; }
+    const univId = univMap[univStr.toLowerCase()];
+    if (!univId) { failedRows.push(`Baris ${i+2}: Universitas "${univStr}" tidak ditemukan`); return; }
+    toInsert.push({ nama: nama.trim(), nim, universitas_id: univId });
+  });
+  if (toInsert.length === 0) { toast('Tidak ada data valid! ' + (failedRows[0] || ''), 'error'); return; }
+  let inserted = 0;
+  for (let i = 0; i < toInsert.length; i += 100) {
+    const { error } = await sb.from('tabel_mahasiswa').insert(toInsert.slice(i, i+100));
+    if (!error) inserted += Math.min(100, toInsert.length - i);
+  }
+  toast(`✅ ${inserted} mahasiswa diimport!${failedRows.length ? ` (${failedRows.length} gagal)` : ''}`, 'success');
+  clearExcelPreview();
+}
+
+function getCol(row, keys) {
+  for (const k of keys) { if (row[k] !== undefined && row[k] !== '') return row[k]; }
+  return null;
+}
+
+// ============================================================
+// ABSENSI TABLE (Download tab)
+// ============================================================
+async function loadAbsensiTable() {
+  if (!sb) return;
+  const start = document.getElementById('filterStart').value;
+  const end   = document.getElementById('filterEnd').value;
+  const tbody = document.getElementById('absensiTbody');
+  tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div></td></tr>`;
+
+  let query = sb
+    .from('tabel_absensi')
+    .select(`
+      id, kelompok, tanggal,
+      tabel_asisten(nama),
+      tabel_universitas(nama),
+      tabel_absensi_modul(tabel_modul(nama)),
+      tabel_absensi_mahasiswa(tabel_mahasiswa(nama,nim))
+    `)
+    .order('tanggal', { ascending: false });
+
+  if (start) query = query.gte('tanggal', start);
+  if (end)   query = query.lte('tanggal', end);
+
+  const { data, error } = await query;
+  if (error) { toast('Gagal memuat data: ' + error.message, 'error'); return; }
+
+  absensiRows = data || [];
+  if (absensiRows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="es-icon">📭</div><p>Tidak ada data absensi</p></div></td></tr>`;
+    document.getElementById('btnExportWord').style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = absensiRows.map(row => {
+    const modulNama = (row.tabel_absensi_modul || [])
+      .map(m => escHtml(m.tabel_modul?.nama || '')).join(', ') || '—';
+    return `
+      <tr>
+        <td><input type="checkbox" class="row-check" value="${row.id}"></td>
+        <td>${formatDate(row.tanggal)}</td>
+        <td>${escHtml(row.tabel_asisten?.nama || '—')}</td>
+        <td>${escHtml(row.kelompok)}</td>
+        <td>${escHtml(row.tabel_universitas?.nama || '—')}</td>
+        <td style="max-width:200px;white-space:normal;line-height:1.4;">${modulNama}</td>
+        <td><span class="badge badge-teal">${row.tabel_absensi_mahasiswa?.length || 0} orang</span></td>
+        <td><button class="btn btn-ghost btn-xs" onclick="exportSingleWord('${row.id}')">⬇ Word</button></td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('btnExportWord').style.display = 'inline-flex';
+}
+
+function toggleAllRows(cb) {
+  document.querySelectorAll('.row-check').forEach(c => c.checked = cb.checked);
+}
+
+async function exportSelectedToWord() {
+  const selectedIds = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+  const toExport = selectedIds.length > 0 ? absensiRows.filter(r => selectedIds.includes(r.id)) : absensiRows;
+  if (toExport.length === 0) { toast('Tidak ada data untuk diexport!', 'error'); return; }
+  if (selectedIds.length === 0 && absensiRows.length > 1) {
+    if (!confirm(`Export semua ${absensiRows.length} data absensi?`)) return;
+  }
+  await generateWordDoc(toExport);
+}
+
+async function exportSingleWord(id) {
+  const row = absensiRows.find(r => r.id === id);
+  if (!row) return;
+  await generateWordDoc([row]);
+}
+
+// ============================================================
+// WORD EXPORT
+// ============================================================
+async function generateWordDoc(rows) {
+  toast('Membuat dokumen Word...', 'info');
+  try {
+    const { Document, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, Packer } = window.docx;
+    const children = [];
+
+    rows.forEach((row, idx) => {
+      const mahasiswaList = (row.tabel_absensi_mahasiswa || []).map(am => am.tabel_mahasiswa);
+      // Gabungkan nama modul dengan koma
+      const modulNama = (row.tabel_absensi_modul || [])
+        .map(m => m.tabel_modul?.nama || '').filter(Boolean).join(', ') || '-';
+
+      if (idx > 0) children.push(new Paragraph({ pageBreakBefore: true }));
+
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 200 },
+          children: [new TextRun({ text: 'LAPORAN ABSENSI PRAKTIKUM', bold: true, size: 28, allCaps: true })]
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+          children: [new TextRun({ text: '─────────────────────────────────────', color: '888888', size: 18 })]
+        })
+      );
+
+      const infoData = [
+        ['Nama Asisten',    row.tabel_asisten?.nama || '-'],
+        ['Kelompok',        row.kelompok || '-'],
+        ['Universitas',     row.tabel_universitas?.nama || '-'],
+        ['Tanggal',         formatDate(row.tanggal)],
+        ['Modul Praktikum', modulNama],   // ← bisa berisi beberapa modul
+      ];
+
+      infoData.forEach(([label, value]) => {
+        children.push(new Paragraph({
+          spacing: { after: 100 },
+          children: [
+            new TextRun({ text: label.padEnd(18), bold: true, size: 22 }),
+            new TextRun({ text: ': ', bold: true, size: 22 }),
+            new TextRun({ text: value, size: 22 }),
+          ]
+        }));
+      });
+
+      children.push(new Paragraph({ spacing: { after: 300 } }));
+      children.push(new Paragraph({
+        spacing: { after: 150 },
+        children: [new TextRun({ text: 'Daftar Mahasiswa Hadir:', bold: true, size: 22 })]
+      }));
+
+      const tableRows = [
+        new TableRow({
+          tableHeader: true,
+          children: [
+            makeCell('No.',            true, '8%'),
+            makeCell('Nama Mahasiswa', true, '57%'),
+            makeCell('NIM',            true, '20%'),
+            makeCell('Tanda Tangan',   true, '15%'),
+          ]
+        }),
+        ...mahasiswaList.map((m, i) => new TableRow({
+          children: [
+            makeCell(String(i + 1),  false, '8%'),
+            makeCell(m?.nama || '-', false, '57%'),
+            makeCell(m?.nim  || '-', false, '20%'),
+            makeCell('',             false, '15%'),
+          ]
+        }))
+      ];
+
+      children.push(
+        new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+        new Paragraph({ spacing: { after: 400 } }),
+        new Paragraph({
+          spacing: { after: 80 },
+          children: [new TextRun({ text: `Total Hadir: ${mahasiswaList.length} mahasiswa`, size: 20, italics: true, color: '666666' })]
+        })
+      );
+    });
+
+    const doc = new Document({
+      sections: [{ properties: { page: { margin: { top: 1134, right: 850, bottom: 1134, left: 1134 } } }, children }]
+    });
+
+    const blob = await Packer.toBlob(doc);
+    const filename = rows.length === 1
+      ? `Absensi_${rows[0].tabel_asisten?.nama || 'Unknown'}_${rows[0].tanggal}.docx`
+      : `Rekap_Absensi_${todayStr()}.docx`;
+    downloadBlob(blob, filename);
+    toast('✅ Dokumen Word berhasil diunduh!', 'success');
+  } catch(err) {
+    console.error(err);
+    toast('Gagal membuat Word: ' + err.message, 'error');
+  }
+}
+
+function makeCell(text, isHeader, width) {
+  const { TableCell, Paragraph, TextRun, WidthType } = window.docx;
+  return new TableCell({
+    width: { size: parseInt(width), type: WidthType.PERCENTAGE },
+    children: [new Paragraph({ children: [new TextRun({ text: String(text), bold: isHeader, size: 20 })] })]
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// ============================================================
+// UTILITY
+// ============================================================
+function formatDate(str) {
+  if (!str) return '-';
+  try { return new Date(str + 'T00:00:00').toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }); }
+  catch { return str; }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icons = { success:'✓', error:'✕', info:'ℹ', warning:'⚠' };
+  el.innerHTML = `<span>${icons[type]||'ℹ'}</span><span>${escHtml(msg)}</span>`;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => { el.style.animation = 'toastOut 0.25s ease forwards'; setTimeout(() => el.remove(), 250); }, 3500);
+}
+</script>
+</body>
+</html>
