@@ -581,10 +581,16 @@ const SUPABASE_URL = 'https://ahmhfzrqrchytkextstw.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFobWhmenJxcmNoeXRrZXh0c3R3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMzA4MTAsImV4cCI6MjA5MjkwNjgxMH0.eqP_PGbjn0G_jGY-cJSlzjoJ0yVm90mQg8CTJbaZ9Rw';
 let sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let isAdmin        = false;
-let allMahasiswa   = [];
-let absensiRows    = [];
+let isAdmin         = false;
+let allMahasiswa    = [];
+let absensiRows     = [];
 let excelParsedData = [];
+
+// ============================================================
+// [FIX] Set terpisah untuk menyimpan ID mahasiswa yang dicentang
+// Ini memastikan centang tidak hilang saat list di-filter ulang
+// ============================================================
+let checkedMhsIds = new Set();
 
 // ============================================================
 // INIT
@@ -730,6 +736,10 @@ function getCheckedModulIds() {
 async function onUnivChange() {
   const univId = document.getElementById('rekap_univ').value;
   const container = document.getElementById('mahasiswaContainer');
+
+  // [FIX] Reset set centang setiap ganti universitas
+  checkedMhsIds.clear();
+
   if (!univId) {
     allMahasiswa = [];
     container.innerHTML = `<div class="empty-state"><div class="es-icon">🏫</div><p>Pilih <strong>Asal Universitas</strong> terlebih dahulu</p></div>`;
@@ -760,7 +770,7 @@ function renderMahasiswaList(list) {
       <button onclick="selectAllMhs(false)" style="color:var(--text-dim);">Batal Semua</button>
     </div>
     <div class="mahasiswa-list" id="mhsList">
-      ${list.map(m => mhsItemHtml(m, false)).join('')}
+      ${list.map(m => mhsItemHtml(m, checkedMhsIds.has(m.id))).join('')}
     </div>`;
   updateHadirBadge();
 }
@@ -769,10 +779,20 @@ function mhsItemHtml(m, checked) {
   return `
     <div class="mhs-item ${checked ? 'checked' : ''}" id="mhsItem_${m.id}" onclick="toggleMhs('${m.id}')">
       <input type="checkbox" id="chk_${m.id}" value="${m.id}" ${checked ? 'checked' : ''}
-             onchange="updateHadirBadge()" onclick="event.stopPropagation()">
+             onchange="syncCheckedSet('${m.id}', this.checked)" onclick="event.stopPropagation()">
       <span class="mhs-name">${escHtml(m.nama)}</span>
       <span class="mhs-nim font-mono">${escHtml(m.nim || '')}</span>
     </div>`;
+}
+
+// [FIX] Sinkronkan Set saat checkbox berubah via klik langsung
+function syncCheckedSet(id, isChecked) {
+  if (isChecked) {
+    checkedMhsIds.add(id);
+  } else {
+    checkedMhsIds.delete(id);
+  }
+  updateHadirBadge();
 }
 
 function toggleMhs(id) {
@@ -781,31 +801,37 @@ function toggleMhs(id) {
   if (!chk) return;
   chk.checked = !chk.checked;
   item.classList.toggle('checked', chk.checked);
-  updateHadirBadge();
+  // [FIX] Update Set saat toggle
+  syncCheckedSet(id, chk.checked);
 }
 
+// [FIX] Hitung badge dari Set, bukan dari DOM (akurat meski ada filter)
 function updateHadirBadge() {
-  const count = document.querySelectorAll('#mahasiswaContainer input[type="checkbox"]:checked').length;
-  document.getElementById('hadirBadge').textContent = `${count} hadir`;
+  document.getElementById('hadirBadge').textContent = `${checkedMhsIds.size} hadir`;
 }
 
+// [FIX] filterMahasiswaList membaca state centang dari Set, bukan DOM
 function filterMahasiswaList(q) {
   q = q.toLowerCase().trim();
   const filtered = q ? allMahasiswa.filter(m => m.nama.toLowerCase().includes(q)) : allMahasiswa;
   const mhsList = document.getElementById('mhsList');
   if (!mhsList) return;
-  mhsList.innerHTML = filtered.map(m => {
-    const isChecked = !!document.getElementById('chk_' + m.id)?.checked;
-    return mhsItemHtml(m, isChecked);
-  }).join('');
-  updateHadirBadge();
+  // Render ulang dengan state centang dari checkedMhsIds
+  mhsList.innerHTML = filtered.map(m => mhsItemHtml(m, checkedMhsIds.has(m.id))).join('');
 }
 
+// [FIX] selectAllMhs update Set sesuai aksi pilih/batal semua
 function selectAllMhs(check) {
+  // Hanya affect mahasiswa yang sedang tampil di list (hasil filter)
   document.querySelectorAll('#mhsList input[type="checkbox"]').forEach(cb => {
     cb.checked = check;
     const item = document.getElementById('mhsItem_' + cb.value);
     if (item) item.classList.toggle('checked', check);
+    if (check) {
+      checkedMhsIds.add(cb.value);
+    } else {
+      checkedMhsIds.delete(cb.value);
+    }
   });
   updateHadirBadge();
 }
@@ -827,9 +853,8 @@ async function submitAbsensi() {
     toast('Pilih minimal 1 modul praktikum!', 'error'); return;
   }
 
-  const mhsChecked = Array.from(
-    document.querySelectorAll('#mahasiswaContainer input[type="checkbox"]:checked')
-  ).map(cb => cb.value);
+  // [FIX] Ambil dari Set, bukan dari DOM
+  const mhsChecked = Array.from(checkedMhsIds);
 
   if (mhsChecked.length === 0) {
     toast('Pilih minimal 1 mahasiswa yang hadir!', 'error'); return;
@@ -870,6 +895,9 @@ function resetRekapForm() {
     if (item) item.classList.remove('checked');
   });
   updateModulCount();
+
+  // [FIX] Reset Set centang mahasiswa
+  checkedMhsIds.clear();
 
   // Reset mahasiswa
   document.getElementById('mahasiswaContainer').innerHTML = `
@@ -1125,7 +1153,6 @@ async function generateWordDoc(rows) {
 
     rows.forEach((row, idx) => {
       const mahasiswaList = (row.tabel_absensi_mahasiswa || []).map(am => am.tabel_mahasiswa);
-      // Gabungkan nama modul dengan koma
       const modulNama = (row.tabel_absensi_modul || [])
         .map(m => m.tabel_modul?.nama || '').filter(Boolean).join(', ') || '-';
 
@@ -1149,7 +1176,7 @@ async function generateWordDoc(rows) {
         ['Kelompok',        row.kelompok || '-'],
         ['Universitas',     row.tabel_universitas?.nama || '-'],
         ['Tanggal',         formatDate(row.tanggal)],
-        ['Modul Praktikum', modulNama],   // ← bisa berisi beberapa modul
+        ['Modul Praktikum', modulNama],
       ];
 
       infoData.forEach(([label, value]) => {
